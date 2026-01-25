@@ -1,0 +1,87 @@
+/* Visual Style Contract */
+:root {
+  /* Colors */
+  --color-background: #FFFFFF;
+  --color-surface: #F0F0F0;
+  --color-surface-subtle: #F0F0F0;
+  --color-border: #F0F0F0;
+  --color-text-primary: #28233C;
+  --color-text-secondary: #737373;
+  --color-primary-bg: #28233C;
+  --color-primary-text: #F0F0F0;
+  --color-disabled-surface: #C0C0C0;
+  --color-disabled-text: #F0F0F0;
+  --color-overlay: rgba(0, 0, 0, 0.5);
+
+  /* Game colors */
+  --color-x: #10B981;
+  --color-o: #E4505F;
+
+  /* Typography */
+  --font-family: Avenir, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-size-title: 31px;
+  --font-size-section: 16px;
+  --font-size-body: 16px;
+  --font-size-button: 16px;
+  --line-height-title: 44px;
+
+  /* Spacing */
+  --radius-card: 10px;
+  --radius-cell: 5px;
+  --radius-button: 10px;
+  --padding-card: 37px;
+  --padding-screen-h: 8px;
+  --spacing-unit: 16px;
+}
+
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* Typography classes */
+.text-title {
+  font-size: var(--font-size-title);
+  font-weight: 900;
+  line-height: var(--line-height-title);
+}
+
+.text-section {
+  font-size: var(--font-size-section);
+  font-weight: 900;
+}
+
+.text-body {
+  font-size: var(--font-size-body);
+  font-weight: 400;
+}
+
+.text-button {
+  font-size: var(--font-size-button);
+  font-weight: 900;
+}
