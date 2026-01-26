@@ -27,6 +27,9 @@ export default function Game({ config, onBack }: GameProps) {
   const [lastMoveIndex, setLastMoveIndex] = useState<number | null>(null);
   const [isInputLocked, setIsInputLocked] = useState(false);
 
+  // Show spinner when bot is thinking
+  const showSpinner = config.mode === "bot" && isInputLocked;
+
   // DEV-ONLY: Keyboard shortcuts for testing result modals
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -254,6 +257,22 @@ export default function Game({ config, onBack }: GameProps) {
         >
           ←
         </button>
+      </div>
+
+      {/* Bot thinking spinner */}
+      <div style={{ height: "44px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {showSpinner && (
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "5px solid #D1D1D1",
+              borderTop: "5px solid var(--color-background)",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+            }}
+          />
+        )}
       </div>
 
       {/* Game board */}

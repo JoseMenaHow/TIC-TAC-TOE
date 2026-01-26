@@ -29,7 +29,7 @@ export function getBotMove(
     return emptyCells[randomIndex];
   }
 
-  // NORMAL: Strategic heuristics
+  // NORMAL & HARD: Strategic heuristics
   const botPlayer: Player = "O";
   const humanPlayer: Player = "X";
 
@@ -45,7 +45,25 @@ export function getBotMove(
     return blockingMove;
   }
 
-  // 3. Prefer center (only for 3x3 grid)
+  // 3. HARD ONLY: Anti-fork defense (3x3 only)
+  // If bot has center and human has opposite corners, play an edge to prevent fork
+  if (difficulty === "hard" && gridSize === 3) {
+    if (board[4] === botPlayer) {
+      const hasOppositeCorners =
+        (board[0] === humanPlayer && board[8] === humanPlayer) ||
+        (board[2] === humanPlayer && board[6] === humanPlayer);
+
+      if (hasOppositeCorners) {
+        const edges = [1, 3, 5, 7];
+        const availableEdge = edges.find(i => board[i] === null);
+        if (availableEdge !== undefined) {
+          return availableEdge;
+        }
+      }
+    }
+  }
+
+  // 4. Prefer center (only for 3x3 grid)
   if (gridSize === 3) {
     const center = 4;
     if (board[center] === null) {
@@ -53,7 +71,7 @@ export function getBotMove(
     }
   }
 
-  // 4. Prefer corners (only for 3x3 grid)
+  // 5. Prefer corners (only for 3x3 grid)
   if (gridSize === 3) {
     const corners = [0, 2, 6, 8];
     const availableCorners = corners.filter(i => board[i] === null);
@@ -63,7 +81,7 @@ export function getBotMove(
     }
   }
 
-  // 5. Fallback to random empty cell
+  // 6. Fallback to random empty cell
   const randomIndex = Math.floor(Math.random() * emptyCells.length);
   return emptyCells[randomIndex];
 }
