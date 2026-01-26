@@ -7,15 +7,20 @@ import OnlineIcon from "../icons/OnlineIcon";
 
 interface MainMenuProps {
   onStartGame: (config: GameConfig) => void;
+  onBotSetup: () => void;
 }
 
-export default function MainMenu({ onStartGame }: MainMenuProps) {
+export default function MainMenu({ onStartGame, onBotSetup }: MainMenuProps) {
   const handleLocal1v1 = () => {
     onStartGame({
       mode: "local",
       gridSize: 3,
       winLength: 3,
     });
+  };
+
+  const handleVsBot = () => {
+    onBotSetup();
   };
 
   return (
@@ -190,7 +195,8 @@ export default function MainMenu({ onStartGame }: MainMenuProps) {
           <ModeCard
             icon={<BotIcon size={32} />}
             label="Vs Bot"
-            enabled={false}
+            enabled={true}
+            onClick={handleVsBot}
             delay={0.2}
           />
           <ModeCard

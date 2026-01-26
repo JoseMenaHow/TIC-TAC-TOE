@@ -1,10 +1,12 @@
 // Game configuration
 export type GameMode = "local" | "bot" | "online";
+export type BotDifficulty = "easy" | "normal" | "hard";
 
 export interface GameConfig {
   mode: GameMode;
   gridSize: number;
   winLength: number;
+  difficulty?: BotDifficulty;
 }
 
 // Game state

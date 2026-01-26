@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { GameConfig, GameState } from "../types/game";
 import { checkWinner, checkDraw } from "../utils/gameLogic";
+import { getBotMove } from "../utils/bot";
 import GameBoard from "./GameBoard";
 import TurnIndicator from "./TurnIndicator";
 import WinModal from "./WinModal";
@@ -24,6 +25,7 @@ export default function Game({ config, onBack }: GameProps) {
   }));
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [lastMoveIndex, setLastMoveIndex] = useState<number | null>(null);
+  const [isInputLocked, setIsInputLocked] = useState(false);
 
   // DEV-ONLY: Keyboard shortcuts for testing result modals
   useEffect(() => {
@@ -94,6 +96,7 @@ export default function Game({ config, onBack }: GameProps) {
             isDraw: false,
           });
           setLastMoveIndex(null);
+          setIsInputLocked(false);
           setShowExitConfirm(false);
           break;
       }
@@ -103,49 +106,94 @@ export default function Game({ config, onBack }: GameProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [config.gridSize]);
 
-  const handleCellClick = (index: number) => {
-    // Ignore clicks if game is over or cell is occupied
-    if (gameState.winner || gameState.isDraw || gameState.board[index] !== null) {
+  // Bot turn handler
+  useEffect(() => {
+    // Only run if it's bot mode, O's turn, game not over, and input not already locked
+    if (
+      config.mode !== "bot" ||
+      gameState.currentPlayer !== "O" ||
+      gameState.winner !== null ||
+      gameState.isDraw ||
+      isInputLocked
+    ) {
       return;
     }
 
+    // Lock input while bot is "thinking"
+    setIsInputLocked(true);
+
+    // Short delay to make bot feel natural (500ms)
+    const timerId = setTimeout(() => {
+      const difficulty = config.difficulty || "normal";
+      const botMoveIndex = getBotMove(
+        gameState.board,
+        difficulty,
+        config.gridSize,
+        config.winLength
+      );
+
+      if (botMoveIndex !== null) {
+        executeMove(botMoveIndex);
+      } else {
+        // No valid move (shouldn't happen)
+        setIsInputLocked(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timerId);
+  }, [gameState, config]);
+
+  // Execute a move at the given index (shared by human and bot)
+  const executeMove = (index: number) => {
     // Track the last move for animation
     setLastMoveIndex(index);
 
-    // Place mark
-    const newBoard = [...gameState.board];
-    newBoard[index] = gameState.currentPlayer;
+    setGameState(prev => {
+      // Place mark
+      const newBoard = [...prev.board];
+      newBoard[index] = prev.currentPlayer;
 
-    // Check for winner
-    const winResult = checkWinner(newBoard, config.gridSize, config.winLength);
-    if (winResult) {
-      setGameState({
-        ...gameState,
+      // Check for winner
+      const winResult = checkWinner(newBoard, config.gridSize, config.winLength);
+      if (winResult) {
+        setIsInputLocked(false);
+        return {
+          ...prev,
+          board: newBoard,
+          winner: winResult.winner,
+          winningLine: winResult.line,
+        };
+      }
+
+      // Check for draw
+      const isDraw = checkDraw(newBoard);
+      if (isDraw) {
+        setIsInputLocked(false);
+        return {
+          ...prev,
+          board: newBoard,
+          isDraw: true,
+        };
+      }
+
+      // Continue game - switch player
+      setIsInputLocked(false);
+      return {
+        ...prev,
         board: newBoard,
-        winner: winResult.winner,
-        winningLine: winResult.line,
-      });
-      return;
-    }
-
-    // Check for draw
-    const isDraw = checkDraw(newBoard);
-    if (isDraw) {
-      setGameState({
-        ...gameState,
-        board: newBoard,
-        isDraw: true,
-      });
-      return;
-    }
-
-    // Continue game - switch player
-    setGameState({
-      ...gameState,
-      board: newBoard,
-      currentPlayer: gameState.currentPlayer === "X" ? "O" : "X",
-      turnNumber: gameState.turnNumber + 1,
+        currentPlayer: prev.currentPlayer === "X" ? "O" : "X",
+        turnNumber: prev.turnNumber + 1,
+      };
     });
+  };
+
+  const handleCellClick = (index: number) => {
+    // Ignore clicks if input is locked, game is over, or cell is occupied
+    if (isInputLocked || gameState.winner || gameState.isDraw || gameState.board[index] !== null) {
+      return;
+    }
+
+    executeMove(index);
   };
 
   const handleBack = () => {
@@ -167,6 +215,7 @@ export default function Game({ config, onBack }: GameProps) {
       isDraw: false,
     });
     setLastMoveIndex(null);
+    setIsInputLocked(false);
   };
 
   const handleQuit = () => {
