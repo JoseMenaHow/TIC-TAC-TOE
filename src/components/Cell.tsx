@@ -8,9 +8,10 @@ interface CellProps {
   onClick: () => void;
   isWinningCell: boolean;
   isLastMove: boolean;
+  isExpiring: boolean;
 }
 
-export default function Cell({ value, onClick, isWinningCell, isLastMove }: CellProps) {
+export default function Cell({ value, onClick, isWinningCell, isLastMove, isExpiring }: CellProps) {
   return (
     <motion.button
       onClick={onClick}
@@ -45,8 +46,15 @@ export default function Cell({ value, onClick, isWinningCell, isLastMove }: Cell
       {value && (
         <motion.div
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.08 }}
+          animate={
+            isExpiring
+              ? { opacity: 0, scale: 0.9 }
+              : { opacity: 1, scale: 1 }
+          }
+          transition={{
+            duration: isExpiring ? 0.18 : 0.08,
+            ease: "easeOut",
+          }}
           style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
         >
           {value === "X" ? <XIcon size={48} /> : <OIcon size={48} />}

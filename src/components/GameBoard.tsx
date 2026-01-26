@@ -7,9 +7,10 @@ interface GameBoardProps {
   winningLine: number[] | null;
   onCellClick: (index: number) => void;
   lastMoveIndex: number | null;
+  expiringIndices: number[];
 }
 
-export default function GameBoard({ board, gridSize, winningLine, onCellClick, lastMoveIndex }: GameBoardProps) {
+export default function GameBoard({ board, gridSize, winningLine, onCellClick, lastMoveIndex, expiringIndices }: GameBoardProps) {
   return (
     <div
       style={{
@@ -28,6 +29,7 @@ export default function GameBoard({ board, gridSize, winningLine, onCellClick, l
           onClick={() => onCellClick(index)}
           isWinningCell={winningLine?.includes(index) || false}
           isLastMove={index === lastMoveIndex}
+          isExpiring={expiringIndices.includes(index)}
         />
       ))}
     </div>

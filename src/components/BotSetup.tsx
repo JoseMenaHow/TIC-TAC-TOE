@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { BotDifficulty, GameConfig } from "../types/game";
+import { BotDifficulty, GameConfig, Ruleset } from "../types/game";
 
 interface BotSetupProps {
   onBack: () => void;
@@ -9,7 +9,7 @@ interface BotSetupProps {
 
 export default function BotSetup({ onBack, onStartGame }: BotSetupProps) {
   const [difficulty, setDifficulty] = useState<BotDifficulty>("normal");
-  const [ruleset, setRuleset] = useState<"classic">("classic"); // UI only, for now
+  const [ruleset, setRuleset] = useState<Ruleset>("classic");
   const gridSize = 3; // Locked to 3x3 for bot mode
 
   const handleStartGame = () => {
@@ -18,6 +18,8 @@ export default function BotSetup({ onBack, onStartGame }: BotSetupProps) {
       gridSize: gridSize,
       winLength: gridSize,
       difficulty: difficulty,
+      ruleset: ruleset,
+      decayTurns: ruleset === "decay" ? 7 : undefined,
     };
     onStartGame(config);
   };
@@ -93,7 +95,7 @@ export default function BotSetup({ onBack, onStartGame }: BotSetupProps) {
           </label>
           <select
             value={ruleset}
-            onChange={(e) => setRuleset(e.target.value as "classic")}
+            onChange={(e) => setRuleset(e.target.value as Ruleset)}
             className="text-button"
             style={{
               width: "100%",
@@ -113,7 +115,7 @@ export default function BotSetup({ onBack, onStartGame }: BotSetupProps) {
             }}
           >
             <option value="classic">Classic (3×3)</option>
-            <option disabled>Timed Decay (Coming soon)</option>
+            <option value="decay">Timed Decay</option>
             <option disabled>Circle vs Circle (Coming soon)</option>
             <option disabled>Ultra Tic Tac Toe (Coming soon)</option>
           </select>
@@ -128,10 +130,12 @@ export default function BotSetup({ onBack, onStartGame }: BotSetupProps) {
             backgroundColor: "var(--color-surface)",
             border: "1px solid var(--color-border)",
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
             position: "relative",
             overflow: "hidden",
+            gap: "8px",
           }}
         >
           {/* Simple bot illustration placeholder */}
@@ -175,6 +179,20 @@ export default function BotSetup({ onBack, onStartGame }: BotSetupProps) {
               }}
             />
           </div>
+          {/* Decay mode indicator */}
+          {ruleset === "decay" && (
+            <div
+              className="text-body"
+              style={{
+                fontSize: "11px",
+                color: "var(--color-text-secondary)",
+                opacity: 0.6,
+                textAlign: "center",
+              }}
+            >
+              Marks disappear after 7 turns
+            </div>
+          )}
         </div>
 
         {/* Difficulty Selector - Horizontal Cards */}
