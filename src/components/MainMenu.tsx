@@ -1,26 +1,20 @@
 import { motion } from "framer-motion";
-import { GameConfig } from "../types/game";
 import ModeCard from "./ModeCard";
 import PeopleIcon from "../icons/PeopleIcon";
 import BotIcon from "../icons/BotIcon";
 import OnlineIcon from "../icons/OnlineIcon";
 
 interface MainMenuProps {
-  onStartGame: (config: GameConfig) => void;
-  onBotSetup: () => void;
+  onSetup: (mode: "local" | "bot") => void;
 }
 
-export default function MainMenu({ onStartGame, onBotSetup }: MainMenuProps) {
+export default function MainMenu({ onSetup }: MainMenuProps) {
   const handleLocal1v1 = () => {
-    onStartGame({
-      mode: "local",
-      gridSize: 3,
-      winLength: 3,
-    });
+    onSetup("local");
   };
 
   const handleVsBot = () => {
-    onBotSetup();
+    onSetup("bot");
   };
 
   return (

@@ -95,3 +95,20 @@ button {
     transform: rotate(360deg);
   }
 }
+
+/* Decay slider styles */
+.decay-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 0;
+  height: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.decay-slider::-moz-range-thumb {
+  width: 0;
+  height: 0;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+}

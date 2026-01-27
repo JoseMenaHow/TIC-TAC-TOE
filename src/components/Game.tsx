@@ -518,8 +518,8 @@ export default function Game({ config, onBack }: GameProps) {
       )}
       {showExitConfirm && (
         <ExitConfirmModal
-          onContinue={() => setShowExitConfirm(false)}
           onQuit={handleQuit}
+          onBack={() => setShowExitConfirm(false)}
         />
       )}
     </motion.div>

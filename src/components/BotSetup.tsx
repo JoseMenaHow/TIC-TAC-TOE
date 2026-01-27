@@ -2,24 +2,32 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { BotDifficulty, GameConfig, Ruleset } from "../types/game";
 
-interface BotSetupProps {
+interface GameSetupProps {
+  mode: "local" | "bot";
   onBack: () => void;
   onStartGame: (config: GameConfig) => void;
 }
 
-export default function BotSetup({ onBack, onStartGame }: BotSetupProps) {
+export default function GameSetup({ mode, onBack, onStartGame }: GameSetupProps) {
   const [difficulty, setDifficulty] = useState<BotDifficulty>("normal");
   const [ruleset, setRuleset] = useState<Ruleset>("classic");
-  const gridSize = 3; // Locked to 3x3 for bot mode
+  const [decayTurns, setDecayTurns] = useState<number>(7);
+  const gridSize = 3; // Locked to 3x3
+
+  // Ruleset descriptions
+  const RULESET_DESCRIPTIONS: Record<Ruleset, string> = {
+    classic: "Play the classic rules — first to connect 3 wins.",
+    decay: "Marks disappear after a set number of turns, keeping the board in motion.",
+  };
 
   const handleStartGame = () => {
     const config: GameConfig = {
-      mode: "bot",
+      mode: mode,
       gridSize: gridSize,
       winLength: gridSize,
-      difficulty: difficulty,
+      ...(mode === "bot" && { difficulty: difficulty }),
       ruleset: ruleset,
-      decayTurns: ruleset === "decay" ? 7 : undefined,
+      decayTurns: ruleset === "decay" ? decayTurns : undefined,
     };
     onStartGame(config);
   };
@@ -77,7 +85,7 @@ export default function BotSetup({ onBack, onStartGame }: BotSetupProps) {
             textAlign: "center",
           }}
         >
-          Vs Bot
+          {mode === "bot" ? "Vs Bot" : "Local 1v1"}
         </h1>
 
         {/* Ruleset Dropdown */}
@@ -119,95 +127,225 @@ export default function BotSetup({ onBack, onStartGame }: BotSetupProps) {
             <option disabled>Circle vs Circle (Coming soon)</option>
             <option disabled>Ultra Tic Tac Toe (Coming soon)</option>
           </select>
-        </div>
-
-        {/* Illustration Area */}
-        <div
-          style={{
-            width: "100%",
-            height: "120px",
-            borderRadius: "var(--radius-card)",
-            backgroundColor: "var(--color-surface)",
-            border: "1px solid var(--color-border)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            position: "relative",
-            overflow: "hidden",
-            gap: "8px",
-          }}
-        >
-          {/* Simple bot illustration placeholder */}
-          <div
-            style={{
-              display: "flex",
-              gap: "calc(var(--spacing-unit) * 1.5)",
-              alignItems: "center",
-              opacity: 0.4,
-            }}
-          >
-            {/* User icon */}
-            <div
-              style={{
-                width: "48px",
-                height: "48px",
-                borderRadius: "50%",
-                backgroundColor: "var(--color-text-secondary)",
-                opacity: 0.3,
-              }}
-            />
-            {/* VS text */}
-            <div
+          {/* Helper text */}
+          {RULESET_DESCRIPTIONS[ruleset] && (
+            <p
               className="text-body"
               style={{
-                fontSize: "14px",
-                fontWeight: 700,
+                fontSize: "13px",
                 color: "var(--color-text-secondary)",
+                marginTop: "calc(var(--spacing-unit) * 0.5)",
+                lineHeight: "1.4",
               }}
             >
-              VS
-            </div>
-            {/* Bot icon */}
-            <div
-              style={{
-                width: "48px",
-                height: "48px",
-                borderRadius: "12px",
-                backgroundColor: "var(--color-text-secondary)",
-                opacity: 0.3,
-              }}
-            />
-          </div>
-          {/* Decay mode indicator */}
-          {ruleset === "decay" && (
-            <div
-              className="text-body"
-              style={{
-                fontSize: "11px",
-                color: "var(--color-text-secondary)",
-                opacity: 0.6,
-                textAlign: "center",
-              }}
-            >
-              Marks disappear after 7 turns
-            </div>
+              {RULESET_DESCRIPTIONS[ruleset]}
+            </p>
           )}
         </div>
 
-        {/* Difficulty Selector - Horizontal Cards */}
-        <div>
-          <label
-            className="text-body"
+        {/* Illustration Area - Hidden for Timed Decay */}
+        {ruleset !== "decay" && (
+          <div
             style={{
-              display: "block",
-              marginBottom: "calc(var(--spacing-unit) * 0.75)",
-              color: "var(--color-text-secondary)",
-              fontWeight: 600,
+              width: "100%",
+              height: "120px",
+              borderRadius: "var(--radius-card)",
+              backgroundColor: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative",
+              overflow: "hidden",
+              gap: "8px",
             }}
           >
-            Difficulty
-          </label>
+            {/* Simple bot illustration placeholder */}
+            <div
+              style={{
+                display: "flex",
+                gap: "calc(var(--spacing-unit) * 1.5)",
+                alignItems: "center",
+                opacity: 0.4,
+              }}
+            >
+              {/* User icon */}
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  backgroundColor: "var(--color-text-secondary)",
+                  opacity: 0.3,
+                }}
+              />
+              {/* VS text */}
+              <div
+                className="text-body"
+                style={{
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                VS
+              </div>
+              {/* Bot icon */}
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "12px",
+                  backgroundColor: "var(--color-text-secondary)",
+                  opacity: 0.3,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Turns before decay slider - Only shown for decay ruleset */}
+        {ruleset === "decay" && (
+          <div>
+            <label
+              className="text-body"
+              style={{
+                display: "block",
+                marginBottom: "calc(var(--spacing-unit) * 1.25)",
+                color: "var(--color-text-secondary)",
+                fontWeight: 600,
+              }}
+            >
+              Turns before decay
+            </label>
+
+            {/* Slider container */}
+            <div style={{ position: "relative", paddingTop: "16px", paddingBottom: "16px" }}>
+              {/* Background track line connecting all steps */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "0",
+                  right: "0",
+                  height: "2px",
+                  backgroundColor: "#D1D1D1",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                }}
+              />
+
+              {/* Step markers positioned at exact slider positions */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "0",
+                  right: "0",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                }}
+              >
+                {[
+                  { value: 4, position: 0 },
+                  { value: 5, position: 33.33 },
+                  { value: 6, position: 66.67 },
+                  { value: 7, position: 100 },
+                ].map(({ value, position }) => (
+                  <div
+                    key={value}
+                    style={{
+                      position: "absolute",
+                      left: `${position}%`,
+                      transform: "translate(-50%, -50%)",
+                      top: "50%",
+                      width: value === decayTurns ? "18px" : "8px",
+                      height: value === decayTurns ? "18px" : "8px",
+                      borderRadius: "50%",
+                      backgroundColor: value === decayTurns ? "var(--color-primary-bg)" : "#D1D1D1",
+                      transition: "all 0.2s ease",
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Range input slider */}
+              <input
+                type="range"
+                min={4}
+                max={7}
+                step={1}
+                value={decayTurns}
+                onChange={(e) => setDecayTurns(Number(e.target.value))}
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  height: "32px",
+                  cursor: "pointer",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  backgroundColor: "transparent",
+                  outline: "none",
+                }}
+                className="decay-slider"
+              />
+            </div>
+
+            {/* Value labels */}
+            <div
+              style={{
+                position: "relative",
+                marginTop: "calc(var(--spacing-unit) * 0.5)",
+                height: "24px",
+              }}
+            >
+              {[
+                { value: 4, position: 0 },
+                { value: 5, position: 33.33 },
+                { value: 6, position: 66.67 },
+                { value: 7, position: 100 },
+              ].map(({ value, position }) => (
+                <button
+                  key={value}
+                  onClick={() => setDecayTurns(value)}
+                  className="text-body"
+                  style={{
+                    position: "absolute",
+                    left: `${position}%`,
+                    transform: "translateX(-50%)",
+                    fontSize: "14px",
+                    fontWeight: value === decayTurns ? 700 : 500,
+                    color: value === decayTurns ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                    cursor: "pointer",
+                    backgroundColor: "transparent",
+                    border: "none",
+                    padding: "calc(var(--spacing-unit) * 0.25)",
+                    transition: "all 0.2s ease",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Difficulty Selector - Horizontal Cards (Bot mode only) */}
+        {mode === "bot" && (
+          <div>
+            <label
+              className="text-body"
+              style={{
+                display: "block",
+                marginBottom: "calc(var(--spacing-unit) * 0.75)",
+                color: "var(--color-text-secondary)",
+                fontWeight: 600,
+              }}
+            >
+              Difficulty
+            </label>
           <div
             style={{
               display: "flex",
@@ -335,6 +473,7 @@ export default function BotSetup({ onBack, onStartGame }: BotSetupProps) {
             </button>
           </div>
         </div>
+        )}
 
         {/* Start button */}
         <button

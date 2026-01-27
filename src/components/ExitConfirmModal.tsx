@@ -1,11 +1,11 @@
 import Modal from "./Modal";
 
 interface ExitConfirmModalProps {
-  onContinue: () => void;
   onQuit: () => void;
+  onBack: () => void;
 }
 
-export default function ExitConfirmModal({ onContinue, onQuit }: ExitConfirmModalProps) {
+export default function ExitConfirmModal({ onQuit, onBack }: ExitConfirmModalProps) {
   return (
     <Modal>
       <h2
@@ -33,7 +33,7 @@ export default function ExitConfirmModal({ onContinue, onQuit }: ExitConfirmModa
         }}
       >
         <button
-          onClick={onContinue}
+          onClick={onQuit}
           className="text-button"
           style={{
             padding: "calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1.5)",
@@ -43,10 +43,10 @@ export default function ExitConfirmModal({ onContinue, onQuit }: ExitConfirmModa
             cursor: "pointer",
           }}
         >
-          Continue Playing
+          Yes, quit
         </button>
         <button
-          onClick={onQuit}
+          onClick={onBack}
           className="text-button"
           style={{
             padding: "calc(var(--spacing-unit) * 0.75)",
@@ -55,7 +55,7 @@ export default function ExitConfirmModal({ onContinue, onQuit }: ExitConfirmModa
             cursor: "pointer",
           }}
         >
-          Quit
+          Back
         </button>
       </div>
     </Modal>
