@@ -18,6 +18,7 @@ export default function GameSetup({ mode, onBack, onStartGame }: GameSetupProps)
   const RULESET_DESCRIPTIONS: Record<Ruleset, string> = {
     classic: "Play the classic rules — first to connect 3 wins.",
     decay: "Marks disappear after a set number of turns, keeping the board in motion.",
+    circles: "Place circles of different sizes. Larger circles capture smaller ones.",
   };
 
   const handleStartGame = () => {
@@ -124,7 +125,7 @@ export default function GameSetup({ mode, onBack, onStartGame }: GameSetupProps)
           >
             <option value="classic">Classic (3×3)</option>
             <option value="decay">Timed Decay</option>
-            <option disabled>Circle vs Circle (Coming soon)</option>
+            <option value="circles">Circle vs Circle</option>
             <option disabled>Ultra Tic Tac Toe (Coming soon)</option>
           </select>
           {/* Helper text */}

@@ -3,6 +3,8 @@ import { motion } from "framer-motion";
 import { GameConfig, GameState, Placement, CellValue } from "../types/game";
 import { checkWinner, checkDraw } from "../utils/gameLogic";
 import { getBotMove } from "../utils/bot";
+import { initializeCircleInventory, placeCircle, getTopOwnerBoard, checkCirclesDraw, getNextAvailableSize, getValidCircleMoves, simulateCircleMove, scoreCircleMoveHeuristic, getTopCircle } from "../utils/circleLogic";
+import { computeBestCirclesMoveHard } from "../utils/circlesHardBot";
 import GameBoard from "./GameBoard";
 import TurnIndicator from "./TurnIndicator";
 import WinModal from "./WinModal";
@@ -24,16 +26,25 @@ function deriveBoardFromPlacements(placements: Placement[], gridSize: number): C
 }
 
 export default function Game({ config, onBack }: GameProps) {
-  const [gameState, setGameState] = useState<GameState>(() => ({
-    board: Array(config.gridSize * config.gridSize).fill(null),
-    currentPlayer: "X",
-    turnNumber: 1,
-    winner: null,
-    winningLine: null,
-    isDraw: false,
-    placements: [],
-    expiringIndices: [],
-  }));
+  const [gameState, setGameState] = useState<GameState>(() => {
+    const ruleset = config.ruleset || "classic";
+    const isCircles = ruleset === "circles";
+
+    return {
+      board: Array(config.gridSize * config.gridSize).fill(null),
+      currentPlayer: "X",
+      turnNumber: 1,
+      winner: null,
+      winningLine: null,
+      isDraw: false,
+      placements: [],
+      expiringIndices: [],
+      cellStacks: isCircles ? Array.from({ length: config.gridSize * config.gridSize }, () => []) : null,
+      inventoryX: isCircles ? initializeCircleInventory() : null,
+      inventoryO: isCircles ? initializeCircleInventory() : null,
+      selectedSize: isCircles ? 1 : null,
+    };
+  });
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [lastMoveIndex, setLastMoveIndex] = useState<number | null>(null);
   const [isInputLocked, setIsInputLocked] = useState(false);
@@ -118,6 +129,8 @@ export default function Game({ config, onBack }: GameProps) {
           break;
         case "r":
           // Reset game
+          const ruleset = config.ruleset || "classic";
+          const isCircles = ruleset === "circles";
           setGameState({
             board: Array(config.gridSize * config.gridSize).fill(null),
             currentPlayer: "X",
@@ -127,6 +140,10 @@ export default function Game({ config, onBack }: GameProps) {
             isDraw: false,
             placements: [],
             expiringIndices: [],
+            cellStacks: isCircles ? Array.from({ length: config.gridSize * config.gridSize }, () => []) : null,
+            inventoryX: isCircles ? initializeCircleInventory() : null,
+            inventoryO: isCircles ? initializeCircleInventory() : null,
+            selectedSize: isCircles ? 1 : null,
           });
           setLastMoveIndex(null);
           setIsInputLocked(false);
@@ -159,11 +176,14 @@ export default function Game({ config, onBack }: GameProps) {
       return;
     }
 
+    const ruleset = config.ruleset || "classic";
+
     // Debug logging (DEV only)
     if (import.meta.env.DEV) {
       console.log("🤖 Bot turn starting:", {
         currentPlayer: gameState.currentPlayer,
         turnNumber: gameState.turnNumber,
+        ruleset,
         placementsCount: gameState.placements.length,
       });
     }
@@ -191,6 +211,227 @@ export default function Game({ config, onBack }: GameProps) {
         failsafeTimerRef.current = null;
       }
 
+      // Circles bot path (difficulty-based AI)
+      if (ruleset === "circles") {
+        // Must have circles state initialized
+        if (!gameState.cellStacks || !gameState.inventoryO) {
+          console.error("Circles bot: state not initialized");
+          setIsInputLocked(false);
+          botPendingRef.current = false;
+          return;
+        }
+
+        const gridSize = config.gridSize;
+        const winLength = config.winLength;
+
+        const allMoves = getValidCircleMoves(gameState.cellStacks, gameState.inventoryO);
+
+        if (allMoves.length === 0) {
+          // No valid moves; draw logic should resolve on next state update
+          if (import.meta.env.DEV) {
+            console.log("🤖 Bot has no valid moves");
+          }
+          setIsInputLocked(false);
+          botPendingRef.current = false;
+          return;
+        }
+
+        const difficulty = config.difficulty || "normal";
+
+        // Helper: pick a move and execute it (selectedSize -> executeMove)
+        const commitMove = (move: { cellIndex: number; size: 1 | 2 | 3 }) => {
+          if (import.meta.env.DEV) {
+            console.log("🤖 Bot chose circle move:", move, "difficulty:", difficulty);
+          }
+          setGameState(prev => {
+            if (!prev.cellStacks || !prev.inventoryO) return prev;
+            return { ...prev, selectedSize: move.size };
+          });
+          window.setTimeout(() => {
+            executeMove(move.cellIndex);
+            botPendingRef.current = false;
+          }, 0);
+        };
+
+        // EASY: random valid move
+        if (difficulty === "easy") {
+          const move = allMoves[Math.floor(Math.random() * allMoves.length)];
+          commitMove(move);
+          return;
+        }
+
+        // HARD: full minimax solver (near-unbeatable)
+        if (difficulty === "hard") {
+          if (!gameState.inventoryX) {
+            console.error("Circles bot hard: inventoryX not initialized");
+            setIsInputLocked(false);
+            botPendingRef.current = false;
+            return;
+          }
+
+          const move = computeBestCirclesMoveHard({
+            stacks: gameState.cellStacks,
+            invX: gameState.inventoryX,
+            invO: gameState.inventoryO,
+            currentPlayer: "O",
+            gridSize,
+            winLength,
+            checkWinner,
+          });
+
+          if (!move) {
+            // No valid moves
+            setIsInputLocked(false);
+            botPendingRef.current = false;
+            return;
+          }
+
+          commitMove(move);
+          return;
+        }
+
+        // NORMAL: tactical heuristic with 1-ply safety
+        // 1) Win now if possible
+        // 2) Block X immediate win if possible
+        // 3) Otherwise choose best heuristic move with 1-ply safety
+
+        // 1) Win now
+        for (const move of allMoves) {
+          const sim = simulateCircleMove(gameState.cellStacks, gameState.inventoryO, move, "O");
+          const board = getTopOwnerBoard(sim.newStacks);
+          const win = checkWinner(board, gridSize, winLength);
+          if (win?.winner === "O") {
+            commitMove(move);
+            return;
+          }
+        }
+
+        // 2) Block X immediate win
+        // Find any X winning move next turn; try to prevent it by taking that cell with ANY size that is valid now.
+        let threats: number[] = [];
+        if (gameState.inventoryX) {
+          const xMoves = getValidCircleMoves(gameState.cellStacks, gameState.inventoryX);
+          for (const xm of xMoves) {
+            const simX = simulateCircleMove(gameState.cellStacks, gameState.inventoryX, xm, "X");
+            const boardX = getTopOwnerBoard(simX.newStacks);
+            const winX = checkWinner(boardX, gridSize, winLength);
+            if (winX?.winner === "X") threats.push(xm.cellIndex);
+          }
+        }
+        threats = Array.from(new Set(threats));
+
+        if (threats.length > 0) {
+          const threatSet = new Set(threats);
+
+          // For each threatened cell, choose the LARGEST size we can legally place there (given inventory)
+          const bestPerThreatCell = new Map<number, { cellIndex: number; size: 1 | 2 | 3 }>();
+
+          for (const m of allMoves) {
+            if (!threatSet.has(m.cellIndex)) continue;
+
+            const existing = bestPerThreatCell.get(m.cellIndex);
+            // keep the largest size move for that threat cell
+            if (!existing || m.size > existing.size) {
+              bestPerThreatCell.set(m.cellIndex, m);
+            }
+          }
+
+          const maxBlockingMoves = Array.from(bestPerThreatCell.values());
+
+          if (maxBlockingMoves.length > 0) {
+            // If there is exactly one threat cell, just play that max-size block immediately
+            if (maxBlockingMoves.length === 1) {
+              commitMove(maxBlockingMoves[0]);
+              return;
+            }
+
+            // If there are multiple threat cells, pick the best one using heuristic scoring
+            let best = maxBlockingMoves[0];
+            let bestScore = -Infinity;
+
+            for (const m of maxBlockingMoves) {
+              const sim = simulateCircleMove(gameState.cellStacks!, gameState.inventoryO!, m, "O");
+              const proj = getTopOwnerBoard(sim.newStacks);
+
+              const top = getTopCircle(gameState.cellStacks!, m.cellIndex);
+              const topOwner = top ? top.owner : null;
+              const topSize = top ? top.size : 0;
+
+              const score = scoreCircleMoveHeuristic({
+                move: m,
+                capturedSize: sim.capturedSize,
+                projectedBoard: proj,
+                gridSize,
+                topCircleOwner: topOwner,
+                topCircleSize: topSize as 0 | 1 | 2 | 3,
+                currentPlayer: "O",
+              });
+
+              // Extra defensive bias: prefer larger size even more when blocking
+              const defenseBonus = m.size * 8;
+              const finalScore = score + defenseBonus;
+
+              if (finalScore > bestScore) {
+                bestScore = finalScore;
+                best = m;
+              }
+            }
+
+            commitMove(best);
+            return;
+          }
+        }
+
+        // 3) Heuristic pick with 1-ply safety
+        type Scored = { move: { cellIndex: number; size: 1 | 2 | 3 }; score: number; allowsImmediateLoss: boolean };
+
+        const scored: Scored[] = allMoves.map(m => {
+          const simO = simulateCircleMove(gameState.cellStacks!, gameState.inventoryO!, m, "O");
+          const projO = getTopOwnerBoard(simO.newStacks);
+
+          // Get top circle info for the target cell before our move
+          const top = getTopCircle(gameState.cellStacks!, m.cellIndex);
+          const topOwner = top ? top.owner : null;
+          const topSize = top ? top.size : 0;
+
+          let score = scoreCircleMoveHeuristic({
+            move: m,
+            capturedSize: simO.capturedSize,
+            projectedBoard: projO,
+            gridSize,
+            topCircleOwner: topOwner,
+            topCircleSize: topSize as 0 | 1 | 2 | 3,
+            currentPlayer: "O",
+          });
+
+          // 1-ply safety check (does X have an immediate win after this?)
+          // Applied to both Normal and Hard
+          let allowsImmediateLoss = false;
+          if (gameState.inventoryX) {
+            const xMovesAfter = getValidCircleMoves(simO.newStacks, gameState.inventoryX);
+            for (const xm of xMovesAfter) {
+              const simX = simulateCircleMove(simO.newStacks, gameState.inventoryX, xm, "X");
+              const projX = getTopOwnerBoard(simX.newStacks);
+              const winX = checkWinner(projX, gridSize, winLength);
+              if (winX?.winner === "X") {
+                allowsImmediateLoss = true;
+                break;
+              }
+            }
+            if (allowsImmediateLoss) score -= 1000; // huge penalty
+          }
+
+          return { move: m, score, allowsImmediateLoss };
+        });
+
+        scored.sort((a, b) => b.score - a.score);
+
+        // Take best scored move
+        commitMove(scored[0].move);
+        return;
+      }
+
+      // Existing classic/decay bot logic
       // Derive fresh board from latest placements (after any decay updates)
       const currentBoard = deriveBoardFromPlacements(placementsRef.current, config.gridSize);
 
@@ -259,7 +500,7 @@ export default function Game({ config, onBack }: GameProps) {
       botPendingRef.current = false;
       setIsInputLocked(false);
     };
-  }, [config.mode, gameState.currentPlayer, gameState.winner, gameState.isDraw, gameState.placements.length]);
+  }, [config.mode, config.ruleset, gameState.currentPlayer, gameState.winner, gameState.isDraw, gameState.placements.length, gameState.cellStacks, gameState.inventoryO]);
 
   // Execute a move at the given index (shared by human and bot)
   const executeMove = (index: number) => {
@@ -269,6 +510,92 @@ export default function Game({ config, onBack }: GameProps) {
     setGameState(prev => {
       const newTurnNumber = prev.turnNumber + 1;
       const ruleset = config.ruleset || "classic";
+
+      // Branch: Circle vs Circle ruleset
+      if (ruleset === "circles") {
+        // Guard: Ensure circles state exists
+        if (!prev.cellStacks || !prev.inventoryX || !prev.inventoryO || prev.selectedSize === null) {
+          console.error("Circles state not initialized");
+          return prev;
+        }
+
+        // Get current player's inventory
+        const currentInventory = prev.currentPlayer === "X" ? prev.inventoryX : prev.inventoryO;
+
+        try {
+          // Place circle
+          const { newStacks, newInventory } = placeCircle(
+            prev.cellStacks,
+            currentInventory,
+            index,
+            prev.selectedSize,
+            prev.currentPlayer
+          );
+
+          // Update inventories
+          const updatedInventoryX = prev.currentPlayer === "X" ? newInventory : prev.inventoryX;
+          const updatedInventoryO = prev.currentPlayer === "O" ? newInventory : prev.inventoryO;
+
+          // Derive board from top circles
+          const newBoard = getTopOwnerBoard(newStacks);
+
+          // Check for winner
+          const winResult = checkWinner(newBoard, config.gridSize, config.winLength);
+          if (winResult) {
+            return {
+              ...prev,
+              board: newBoard,
+              cellStacks: newStacks,
+              inventoryX: updatedInventoryX,
+              inventoryO: updatedInventoryO,
+              winner: winResult.winner,
+              winningLine: winResult.line,
+              turnNumber: newTurnNumber,
+            };
+          }
+
+          // Check for draw (both players have no valid moves)
+          const isDraw = checkCirclesDraw(newStacks, updatedInventoryX, updatedInventoryO);
+          if (isDraw) {
+            return {
+              ...prev,
+              board: newBoard,
+              cellStacks: newStacks,
+              inventoryX: updatedInventoryX,
+              inventoryO: updatedInventoryO,
+              isDraw: true,
+              turnNumber: newTurnNumber,
+            };
+          }
+
+          // Switch player
+          const nextPlayer = prev.currentPlayer === "X" ? "O" : "X";
+          const nextInventory = nextPlayer === "X" ? updatedInventoryX : updatedInventoryO;
+
+          // Auto-select next available size for next player if current selection is invalid
+          let nextSelectedSize: 1 | 2 | 3 | null = prev.selectedSize;
+          const sizeKey = prev.selectedSize === 1 ? "small" : prev.selectedSize === 2 ? "medium" : "large";
+          if (nextInventory[sizeKey] <= 0) {
+            nextSelectedSize = getNextAvailableSize(nextInventory);
+          }
+
+          return {
+            ...prev,
+            board: newBoard,
+            cellStacks: newStacks,
+            inventoryX: updatedInventoryX,
+            inventoryO: updatedInventoryO,
+            currentPlayer: nextPlayer,
+            selectedSize: nextSelectedSize,
+            turnNumber: newTurnNumber,
+          };
+        } catch (error) {
+          console.error("Failed to place circle:", error);
+          return prev;
+        }
+      }
+
+      // Classic/Decay rulesets
       const decayTurns = config.decayTurns || 7;
 
       // Add new placement
@@ -365,8 +692,34 @@ export default function Game({ config, onBack }: GameProps) {
       return;
     }
 
-    // Ignore clicks if input is locked, game is over, or cell is occupied
-    if (isInputLocked || gameState.winner || gameState.isDraw || gameState.board[index] !== null) {
+    // Ignore clicks if input is locked or game is over
+    if (isInputLocked || gameState.winner || gameState.isDraw) {
+      return;
+    }
+
+    const ruleset = config.ruleset || "classic";
+
+    // Branch: Circle vs Circle validation
+    if (ruleset === "circles") {
+      // Ensure circles state exists
+      if (!gameState.cellStacks || gameState.selectedSize === null) {
+        return;
+      }
+
+      // Check if this is a valid circle placement
+      const stack = gameState.cellStacks[index];
+      const canPlace = stack.length === 0 || (stack.length > 0 && gameState.selectedSize > stack[stack.length - 1].size);
+
+      if (!canPlace) {
+        return;
+      }
+
+      executeMove(index);
+      return;
+    }
+
+    // Classic/Decay: cell must be empty
+    if (gameState.board[index] !== null) {
       return;
     }
 
@@ -383,6 +736,8 @@ export default function Game({ config, onBack }: GameProps) {
   };
 
   const handlePlayAgain = () => {
+    const ruleset = config.ruleset || "classic";
+    const isCircles = ruleset === "circles";
     setGameState({
       board: Array(config.gridSize * config.gridSize).fill(null),
       currentPlayer: "X",
@@ -392,6 +747,10 @@ export default function Game({ config, onBack }: GameProps) {
       isDraw: false,
       placements: [],
       expiringIndices: [],
+      cellStacks: isCircles ? Array.from({ length: config.gridSize * config.gridSize }, () => []) : null,
+      inventoryX: isCircles ? initializeCircleInventory() : null,
+      inventoryO: isCircles ? initializeCircleInventory() : null,
+      selectedSize: isCircles ? 1 : null,
     });
     setLastMoveIndex(null);
     setIsInputLocked(false);
@@ -466,33 +825,264 @@ export default function Game({ config, onBack }: GameProps) {
         </button>
       </div>
 
-      {/* Bot thinking spinner */}
-      <div style={{ height: "44px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {showSpinner && (
+      {/* Top inventory (circles only) - Always O (Red/Player 2 in 1v1, Bot in vs bot) */}
+      {config.ruleset === "circles" && gameState.inventoryX && gameState.inventoryO && (
+        <div style={{ width: "100%", maxWidth: "400px", marginBottom: "calc(var(--spacing-unit) * 1.5)" }}>
           <div
             style={{
-              width: "40px",
-              height: "40px",
-              border: "5px solid #D1D1D1",
-              borderTop: "5px solid var(--color-background)",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "12px",
+              padding: "8px 16px",
+              backgroundColor: "var(--color-surface)",
+              borderRadius: "var(--radius-card)",
             }}
-          />
-        )}
-      </div>
+          >
+            <span
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--color-text-secondary)",
+                minWidth: "70px",
+              }}
+            >
+              {config.mode === "bot" ? "Bot" : "Player 2"}
+            </span>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {([1, 2, 3] as const).map(size => {
+                const topInventory = gameState.inventoryO;
+                const sizeKey = size === 1 ? "small" : size === 2 ? "medium" : "large";
+                const count = topInventory![sizeKey];
+                const sizePx = size === 1 ? 16 : size === 2 ? 22 : 28;
+                const isBotMode = config.mode === "bot";
+                const topSelectable = !isBotMode && gameState.currentPlayer === "O";
+                const isDisabled = !topSelectable || count === 0;
+                const isSelected = gameState.selectedSize === size && gameState.currentPlayer === "O";
 
-      {/* Game board */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <GameBoard
-          board={gameState.board}
-          gridSize={config.gridSize}
-          winningLine={gameState.winningLine}
-          onCellClick={handleCellClick}
-          lastMoveIndex={lastMoveIndex}
-          expiringIndices={gameState.expiringIndices}
-        />
-      </div>
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => {
+                      if (!isDisabled) {
+                        setGameState(prev => ({ ...prev, selectedSize: size }));
+                      }
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "4px 8px",
+                      backgroundColor: "var(--color-background)",
+                      borderRadius: "12px",
+                      opacity: isDisabled ? 0.4 : 1,
+                      cursor: isDisabled ? "not-allowed" : "pointer",
+                      border: "none",
+                      outline: isSelected ? "3px solid var(--color-o)" : "none",
+                      outlineOffset: "-3px",
+                      transition: "outline 0.15s ease, opacity 0.15s ease",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${sizePx}px`,
+                        height: `${sizePx}px`,
+                        borderRadius: "9999px",
+                        backgroundColor: "var(--color-o)",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        color: "var(--color-text-primary)",
+                      }}
+                    >
+                      ×{count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BoardStage: Fixed-size container for circles mode (no layout shift) */}
+      {config.ruleset === "circles" ? (
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            maxWidth: "400px",
+            aspectRatio: "1",
+            margin: "0 auto",
+          }}
+        >
+          {/* Game board */}
+          <GameBoard
+            board={gameState.board}
+            gridSize={config.gridSize}
+            winningLine={gameState.winningLine}
+            onCellClick={handleCellClick}
+            lastMoveIndex={lastMoveIndex}
+            expiringIndices={gameState.expiringIndices}
+            cellStacks={gameState.cellStacks}
+          />
+
+          {/* Bot thinking overlay (absolute, no layout impact) */}
+          {showSpinner && (
+            <div
+              style={{
+                position: "absolute",
+                inset: "0",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "12px",
+                pointerEvents: "none",
+                borderRadius: "var(--radius-card)",
+              }}
+            >
+              <div
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  border: "5px solid #D1D1D1",
+                  borderTop: "5px solid var(--color-x)",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                }}
+              />
+              <div
+                style={{
+                  fontSize: "14px",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Bot thinking...
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        // Classic/decay: flex layout with spinner above
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+          <GameBoard
+            board={gameState.board}
+            gridSize={config.gridSize}
+            winningLine={gameState.winningLine}
+            onCellClick={handleCellClick}
+            lastMoveIndex={lastMoveIndex}
+            expiringIndices={gameState.expiringIndices}
+            cellStacks={gameState.cellStacks}
+          />
+
+          {/* Classic/decay spinner (in-flow as before) */}
+          <div style={{ position: "absolute", top: "-60px", left: "50%", transform: "translateX(-50%)" }}>
+            {showSpinner && (
+              <div
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  border: "5px solid #D1D1D1",
+                  borderTop: "5px solid var(--color-background)",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bottom inventory (circles only) - Always X (Green/Player 1 in 1v1, You in vs bot) */}
+      {config.ruleset === "circles" && gameState.inventoryX && gameState.inventoryO && (
+        <div style={{ width: "100%", maxWidth: "400px", marginTop: "calc(var(--spacing-unit) * 2)" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "12px",
+              padding: "8px 16px",
+              backgroundColor: "var(--color-surface)",
+              borderRadius: "var(--radius-card)",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--color-text-secondary)",
+                minWidth: "70px",
+              }}
+            >
+              {config.mode === "bot" ? "You" : "Player 1"}
+            </span>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {([1, 2, 3] as const).map(size => {
+                const bottomInventory = gameState.inventoryX;
+                const sizeKey = size === 1 ? "small" : size === 2 ? "medium" : "large";
+                const count = bottomInventory![sizeKey];
+                const sizePx = size === 1 ? 16 : size === 2 ? 22 : 28;
+                const bottomSelectable = gameState.currentPlayer === "X";
+                const isDisabled = !bottomSelectable || count === 0;
+                const isSelected = gameState.selectedSize === size && gameState.currentPlayer === "X";
+
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => {
+                      if (!isDisabled) {
+                        setGameState(prev => ({ ...prev, selectedSize: size }));
+                      }
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "4px 8px",
+                      backgroundColor: "var(--color-background)",
+                      borderRadius: "12px",
+                      opacity: isDisabled ? 0.4 : 1,
+                      cursor: isDisabled ? "not-allowed" : "pointer",
+                      border: "none",
+                      outline: isSelected ? "3px solid var(--color-x)" : "none",
+                      outlineOffset: "-3px",
+                      transition: "outline 0.15s ease, opacity 0.15s ease",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${sizePx}px`,
+                        height: `${sizePx}px`,
+                        borderRadius: "9999px",
+                        backgroundColor: "var(--color-x)",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        color: "var(--color-text-primary)",
+                      }}
+                    >
+                      ×{count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Turn indicator */}
       <div style={{ marginTop: "calc(var(--spacing-unit) * 2)", marginBottom: "calc(var(--spacing-unit) * 2)" }}>
@@ -510,12 +1100,14 @@ export default function Game({ config, onBack }: GameProps) {
           onQuit={handleQuit}
         />
       )}
+
       {gameState.isDraw && (
         <DrawModal
           onPlayAgain={handlePlayAgain}
           onQuit={handleQuit}
         />
       )}
+
       {showExitConfirm && (
         <ExitConfirmModal
           onQuit={handleQuit}
