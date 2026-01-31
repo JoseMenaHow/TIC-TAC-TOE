@@ -15,9 +15,12 @@ interface CellProps {
 export default function Cell({ value, onClick, isWinningCell, isLastMove, isExpiring, cellStack }: CellProps) {
   // Render circles ruleset with stacking visualization
   if (cellStack !== undefined) {
-    const top = cellStack.at(-1) ?? null;
-    const under1 = cellStack.at(-2) ?? null;
-    const under2 = cellStack.at(-3) ?? null;
+    const stack = cellStack ?? [];
+    const len = stack.length;
+
+    const top = len > 0 ? stack[len - 1] : null;
+    const under1 = len > 1 ? stack[len - 2] : null;
+    const under2 = len > 2 ? stack[len - 3] : null;
 
     const getSizePx = (size: 1 | 2 | 3) => {
       if (size === 1) return 32;
