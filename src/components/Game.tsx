@@ -277,6 +277,7 @@ export default function Game({ config, onBack }: GameProps) {
             gridSize,
             winLength,
             checkWinner,
+            maxDepth: 8, // Limit to 8 plies for faster first move
           });
 
           if (!move) {

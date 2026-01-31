@@ -39,6 +39,43 @@ function terminalScore(args: {
   return 0; // draw / no winner
 }
 
+// Heuristic evaluation for depth-limited leaf nodes
+function evaluatePositionHeuristic(args: {
+  stacks: CellStacks;
+  invX: CircleInventory;
+  invO: CircleInventory;
+  maximizingPlayer: Player;
+  gridSize: number;
+}) {
+  const { stacks, invX, invO, maximizingPlayer, gridSize } = args;
+
+  let score = 0;
+
+  // 1) Inventory advantage (more pieces = better)
+  const botInv = maximizingPlayer === "O" ? invO : invX;
+  const oppInv = maximizingPlayer === "O" ? invX : invO;
+  const botTotal = botInv.small + botInv.medium + botInv.large;
+  const oppTotal = oppInv.small + oppInv.medium + oppInv.large;
+  score += (botTotal - oppTotal) * 10;
+
+  // 2) Board control (count cells controlled by each player)
+  const board = getTopOwnerBoard(stacks);
+  let botCells = 0;
+  let oppCells = 0;
+  for (const owner of board) {
+    if (owner === maximizingPlayer) botCells++;
+    else if (owner) oppCells++;
+  }
+  score += (botCells - oppCells) * 15;
+
+  // 3) Center control bonus (middle cell is strategically important)
+  const centerIndex = Math.floor((gridSize * gridSize) / 2);
+  if (board[centerIndex] === maximizingPlayer) score += 5;
+  else if (board[centerIndex] && board[centerIndex] !== maximizingPlayer) score -= 5;
+
+  return score;
+}
+
 /**
  * Compute best move for HARD circles bot (assumes bot is player "O")
  */
@@ -50,8 +87,10 @@ export function computeBestCirclesMoveHard(args: {
   gridSize: number;
   winLength: number;
   checkWinner: (board: (Player | null)[], gridSize: number, winLength: number) => WinnerResult;
+  maxDepth?: number; // optional depth limit (default: Infinity = full search)
 }): CircleMove | null {
-  const { stacks, invX, invO, currentPlayer, gridSize, winLength, checkWinner } = args;
+  const { stacks, invX, invO, currentPlayer, gridSize, winLength, checkWinner, maxDepth } = args;
+  const resolvedMaxDepth = maxDepth ?? Infinity;
 
   const maximizingPlayer: Player = "O";
   const memo = new Map<string, number>();
@@ -81,6 +120,19 @@ export function computeBestCirclesMoveHard(args: {
         winner: win.winner,
         plyFromRoot: node.ply,
         maximizingPlayer,
+      });
+      memo.set(key, score);
+      return score;
+    }
+
+    // Depth limit check: return heuristic if we've reached max depth
+    if (node.ply >= resolvedMaxDepth) {
+      const score = evaluatePositionHeuristic({
+        stacks: node.stacks,
+        invX: node.invX,
+        invO: node.invO,
+        maximizingPlayer,
+        gridSize,
       });
       memo.set(key, score);
       return score;
